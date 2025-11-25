@@ -10,6 +10,12 @@ return {
 		lazy = false, -- neo-tree will lazily load itself
 		opts = {
 			sources = { "filesystem", "buffers", "git_status", "document_symbols" },
+			filesystem = {
+				follow_current_file = {
+					enabled = true,
+					leave_dirs_open = false,
+				},
+			},
 			document_symbols = {
 				follow_cursor = true,
 				client_filters = "first",
@@ -27,7 +33,7 @@ return {
 									align = "right",
 								},
 							},
-						}
+						},
 					},
 				},
 			},
