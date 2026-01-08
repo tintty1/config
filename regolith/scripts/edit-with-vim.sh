@@ -5,7 +5,8 @@ EDITOR_CMD="kitty --single-instance --title edit-with-vim nvim"
 TMPFILE=$(mktemp /tmp/edit_field_XXXXXX.txt)
 CLIPBOARD_BACKUP=$(mktemp /tmp/clipboard_backup_XXXXXX.txt)
 
-xclip -selection clipboard -o > "$CLIPBOARD_BACKUP" 2>/dev/null
+# xclip -selection clipboard -o > "$CLIPBOARD_BACKUP" 2>/dev/null
+xsel --clipboard --output > "$CLIPBOARD_BACKUP" 2>/dev/null
 
 WINDOW_ID=$(xdotool getactivewindow)
 
@@ -13,15 +14,17 @@ xdotool windowfocus "$WINDOW_ID"
 sleep 0.05
 
 xdotool key --window "$WINDOW_ID" ctrl+a
-sleep 0.05
+sleep 0.1
 xdotool key --window "$WINDOW_ID" ctrl+c
-sleep 0.05
+sleep 0.1
 
-xclip -selection clipboard -o > "$TMPFILE"
+# xclip -selection clipboard -o > "$TMPFILE"
+xsel --clipboard --output > "$TMPFILE"
 
 $EDITOR_CMD "$TMPFILE"
 
-xclip -selection clipboard -i < "$TMPFILE"
+# xclip -selection clipboard -i < "$TMPFILE"
+xsel --clipboard --input < "$TMPFILE"
 
 rm -f "$TMPFILE"
 
@@ -36,7 +39,8 @@ sleep 0.1
 xdotool key --window "$WINDOW_ID" ctrl+v
 
 if [ -s "$CLIPBOARD_BACKUP" ]; then
-    cat "$CLIPBOARD_BACKUP" | xclip -selection clipboard
+    # cat "$CLIPBOARD_BACKUP" | xclip -selection clipboard
+    xsel --clipboard --input < "$CLIPBOARD_BACKUP"
 fi
 
 rm -f "$CLIPBOARD_BACKUP"
