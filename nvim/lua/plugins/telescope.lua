@@ -24,11 +24,17 @@ return {
 						["<C-Down>"] = require("telescope.actions").cycle_history_next,
 						["<C-Up>"] = require("telescope.actions").cycle_history_prev,
 					},
+					n = {
+						["d"] = require("telescope.actions").delete_buffer,
+					},
 				},
 			},
 			pickers = {
 				oldfiles = {
 					cwd_only = true,
+				},
+				buffers = {
+					sort_lastused = true,
 				},
 			},
 		})
