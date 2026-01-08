@@ -21,3 +21,11 @@ workspace "$ws10" output nonprimary
 
 
 assign [class="Google-chrome"] workspace "$ws1"
+
+# Edit with Vim in floating window
+bindsym $mod+Shift+v exec --no-startup-id "sleep 0.1 && ~/.config/regolith3/scripts/edit-with-vim.sh"
+for_window [title="edit-with-vim"] floating enable, resize set 1200 800
+for_window [title="edit-with-vim"] move position center
+
+# float popup
+for_window [window_role="pop-up"] floating enable
