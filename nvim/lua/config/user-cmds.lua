@@ -92,3 +92,36 @@ end, { desc = "Open Neo-tree in float mode revealing current file" })
 vim.api.nvim_create_user_command("FloatSymbols", function()
 	vim.cmd("Neotree float document_symbols")
 end, { desc = "Open Neo-tree document symbols in float mode" })
+
+-- Filetype commands
+vim.api.nvim_create_user_command("Json", function()
+	vim.bo.filetype = "json"
+end, { desc = "Set buffer filetype to JSON" })
+
+vim.api.nvim_create_user_command("Md", function()
+	vim.bo.filetype = "markdown"
+end, { desc = "Set buffer filetype to Markdown" })
+
+vim.api.nvim_create_user_command("Python", function()
+	vim.bo.filetype = "python"
+end, { desc = "Set buffer filetype to Python" })
+
+vim.api.nvim_create_user_command("Js", function()
+	vim.bo.filetype = "javascript"
+end, { desc = "Set buffer filetype to JavaScript" })
+
+vim.api.nvim_create_user_command("Ts", function()
+	vim.bo.filetype = "typescript"
+end, { desc = "Set buffer filetype to TypeScript" })
+
+vim.api.nvim_create_user_command("Jinja", function()
+	vim.bo.filetype = "jinja"
+end, { desc = "Set buffer filetype to Jinja" })
+
+-- Filetype abbreviations
+vim.cmd([[cnoreabbrev json Json]])
+vim.cmd([[cnoreabbrev md Md]])
+vim.cmd([[cnoreabbrev python Python]])
+vim.cmd([[cnoreabbrev js Js]])
+vim.cmd([[cnoreabbrev ts Ts]])
+vim.cmd([[cnoreabbrev jinja Jinja]])
