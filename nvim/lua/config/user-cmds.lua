@@ -118,6 +118,12 @@ vim.api.nvim_create_user_command("Jinja", function()
 	vim.bo.filetype = "jinja"
 end, { desc = "Set buffer filetype to Jinja" })
 
+vim.api.nvim_create_user_command("StripTrailingWhitespace", function()
+	local save = vim.fn.winsaveview()
+	vim.cmd([[keeppatterns %s/\s\+$//e]])
+	vim.fn.winrestview(save)
+end, { desc = "Remove trailing whitespace from all lines" })
+
 -- Filetype abbreviations
 vim.cmd([[cnoreabbrev json Json]])
 vim.cmd([[cnoreabbrev md Md]])
