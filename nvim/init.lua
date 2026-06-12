@@ -3,6 +3,7 @@ vim.g.mapleader = " "
 require("config.options")
 require("config.keymaps")
 require("plugins.catppuccin")
+require("plugins.mini-icons")
 require("plugins.which-key")
 require("plugins.cmp")
 require("plugins.mason-lspconfig")
