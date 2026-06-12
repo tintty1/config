@@ -30,8 +30,6 @@ vim.filetype.add {
     j2 = "jinja",
     jinja = "jinja",
     jinja2 = "jinja",
-    gotmpl = "gotmpl",
-    tmpl = "gotmpl",
   },
 }
 
