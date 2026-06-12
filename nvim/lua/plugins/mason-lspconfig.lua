@@ -34,6 +34,6 @@ vim.api.nvim_create_autocmd("LspAttach", {
     map("K", vim.lsp.buf.hover, "Show hover documentation")
     map("<leader>rn", vim.lsp.buf.rename, "Rename symbol")
     map("<leader>ca", vim.lsp.buf.code_action, "Code actions")
-    map("<leader>f", vim.lsp.buf.format, "Format code")
+    -- <leader>f formatting is handled by conform (with LSP fallback).
   end,
 })
