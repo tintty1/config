@@ -47,3 +47,9 @@ cmp.setup {
     ghost_text = true, -- shows a preview of completion inline
   },
 }
+
+-- Advertise cmp's completion capabilities to all LSP servers. Applies as a
+-- default to every server enabled via `vim.lsp.enable()` (e.g. by mason-lspconfig).
+vim.lsp.config("*", {
+  capabilities = require("cmp_nvim_lsp").default_capabilities(),
+})
