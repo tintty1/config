@@ -15,5 +15,9 @@ vim.o.listchars = [[tab:> ,trail:-,nbsp:+]]
 
 vim.o.messagesopt = "hit-enter,history:1000"
 
+-- Open new splits to the right and below
+vim.o.splitright = true
+vim.o.splitbelow = true
+
 -- Auto-reload files when changed outside Neovim
 vim.opt.autoread = true
