@@ -5,6 +5,14 @@ vim.pack.add {
 local fzf = require("fzf-lua")
 
 fzf.setup {
+  keymap = {
+    builtin = {
+      -- inherit the default builtin keymaps (e.g. <S-up>/<S-down> page scroll)
+      true,
+      ["<C-d>"] = "preview-page-down",
+      ["<C-u>"] = "preview-page-up",
+    },
+  },
   oldfiles = {
     cwd_only = true,
   },
