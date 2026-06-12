@@ -17,6 +17,16 @@ vim.keymap.set("n", "<leader>fe", function()
   MiniFiles.open(path)
 end, { desc = "File explorer (mini.files)" })
 
+-- Map <CR> as an additional key for `go_in_plus` (alongside the default `L`).
+vim.api.nvim_create_autocmd("User", {
+  pattern = "MiniFilesBufferCreate",
+  callback = function(args)
+    vim.keymap.set("n", "<CR>", function()
+      MiniFiles.go_in { close_on_file = true }
+    end, { buffer = args.data.buf_id, desc = "Go in entry (and close on file)" })
+  end,
+})
+
 -- ---------------------------------------------------------------------------
 -- Git status integration: color entry names and show a status glyph based on
 -- `git status` for the repo of the directory being shown.
