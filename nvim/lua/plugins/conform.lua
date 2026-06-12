@@ -16,6 +16,18 @@ require("conform").setup {
     css = { "prettier" },
     scss = { "prettier" },
     markdown = { "prettier" },
+    go = { "goimports", "gofmt" },
+    helm = { "helmfmt" },
+  },
+  formatters = {
+    -- helmfmt is not a conform built-in. It formats Go-template indentation in
+    -- Helm charts in place via its `--files` mode; stdin=false makes conform
+    -- pass it a temp file (keeping the .yaml/.tpl extension it filters on).
+    helmfmt = {
+      command = "helmfmt",
+      args = { "--files", "$FILENAME" },
+      stdin = false,
+    },
   },
   default_format_opts = {
     lsp_format = "fallback",

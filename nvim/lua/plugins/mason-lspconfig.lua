@@ -7,7 +7,7 @@ vim.pack.add {
 require("mason").setup()
 
 -- Ensure non-LSP tools (formatters, linters) are installed via Mason.
-local packages_to_install = { "stylua", "prettier" }
+local packages_to_install = { "stylua", "prettier", "goimports" }
 local registry = require("mason-registry")
 for _, pkg_name in ipairs(packages_to_install) do
   local ok, pkg = pcall(registry.get_package, pkg_name)
