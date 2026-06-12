@@ -13,6 +13,10 @@ local parsers = {
   "css",
   "jsonc",
   "tsx",
+  "go",
+  "gomod",
+  "gosum",
+  "gowork",
 }
 
 -- Install missing parsers (async, no-op if already installed).
