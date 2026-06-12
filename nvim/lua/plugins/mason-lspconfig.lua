@@ -19,3 +19,21 @@ end
 require("mason-lspconfig").setup {
   ensure_installed = { "lua_ls", "pyright", "ruff", "ts_ls", "gopls" },
 }
+
+-- Buffer-local LSP keymaps, set only when a server attaches to the buffer.
+vim.api.nvim_create_autocmd("LspAttach", {
+  callback = function(args)
+    local function map(lhs, rhs, desc)
+      vim.keymap.set("n", lhs, rhs, { buffer = args.buf, desc = desc })
+    end
+
+    map("gd", vim.lsp.buf.definition, "Go to definition")
+    map("gD", vim.lsp.buf.declaration, "Go to declaration")
+    map("gr", vim.lsp.buf.references, "Go to references")
+    map("gi", vim.lsp.buf.implementation, "Go to implementation")
+    map("K", vim.lsp.buf.hover, "Show hover documentation")
+    map("<leader>rn", vim.lsp.buf.rename, "Rename symbol")
+    map("<leader>ca", vim.lsp.buf.code_action, "Code actions")
+    map("<leader>f", vim.lsp.buf.format, "Format code")
+  end,
+})
