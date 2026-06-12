@@ -13,6 +13,9 @@ fzf.setup {
   },
 }
 
+-- Route vim.ui.select (code actions, etc.) through fzf-lua.
+fzf.register_ui_select()
+
 local function map(lhs, rhs, desc)
   vim.keymap.set("n", lhs, rhs, { desc = desc })
 end
