@@ -17,6 +17,20 @@ local parsers = {
   "gomod",
   "gosum",
   "gowork",
+  "gotmpl",
+  "jinja",
+  "jinja_inline",
+}
+
+-- Filetype detection for templates not recognized by Neovim out of the box.
+vim.filetype.add {
+  extension = {
+    j2 = "jinja",
+    jinja = "jinja",
+    jinja2 = "jinja",
+    gotmpl = "gotmpl",
+    tmpl = "gotmpl",
+  },
 }
 
 -- Install missing parsers (async, no-op if already installed).
