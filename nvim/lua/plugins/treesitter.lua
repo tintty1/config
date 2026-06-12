@@ -1,5 +1,7 @@
 vim.pack.add {
   { src = "https://github.com/nvim-treesitter/nvim-treesitter" },
+  -- Detects Helm charts and sets `filetype=helm` for their templates.
+  { src = "https://github.com/towolf/vim-helm" },
 }
 
 local parsers = {
@@ -32,6 +34,9 @@ vim.filetype.add {
     tmpl = "gotmpl",
   },
 }
+
+-- Helm templates (filetype `helm`, set by vim-helm) are Go templates.
+vim.treesitter.language.register("gotmpl", "helm")
 
 -- Install missing parsers (async, no-op if already installed).
 require("nvim-treesitter").install(parsers)
