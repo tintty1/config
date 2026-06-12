@@ -13,7 +13,7 @@ local parsers = {
   "typescript",
   "html",
   "css",
-  "jsonc",
+  "json",
   "tsx",
   "go",
   "gomod",
