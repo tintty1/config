@@ -17,5 +17,5 @@ for _, pkg_name in ipairs(packages_to_install) do
 end
 
 require("mason-lspconfig").setup {
-  ensure_installed = { "lua_ls", "pyright", "ruff", "ts_ls" },
+  ensure_installed = { "lua_ls", "pyright", "ruff", "ts_ls", "gopls" },
 }
