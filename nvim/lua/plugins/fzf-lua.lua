@@ -8,13 +8,10 @@ fzf.setup {
   winopts = {
     -- The fzf query is a terminal prompt, not a Neovim buffer, so the normal
     -- i_CTRL-R register paste is unavailable. Emulate it: press <C-r>, then a
-    -- register name, and its contents are typed into the query.
+    -- register name, to paste its contents into the query. Briefly drops to
+    -- terminal-normal mode, pastes the register into the job, and returns.
     on_create = function()
-      vim.keymap.set("t", "<C-r>", function()
-        local reg = vim.fn.getcharstr()
-        local text = vim.fn.getreg(reg) or ""
-        return text:gsub("[\n\r]", " ")
-      end, { expr = true, buffer = true, desc = "Paste register into fzf query" })
+      vim.keymap.set("t", "<C-r>", [['<C-\><C-N>"'.nr2char(getchar()).'pi']], { expr = true, buffer = true })
     end,
   },
   keymap = {
