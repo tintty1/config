@@ -1,8 +1,8 @@
-vim.pack.add {
-  { src = "https://github.com/lewis6991/gitsigns.nvim" },
-}
+vim.pack.add({
+	{ src = "https://github.com/lewis6991/gitsigns.nvim" },
+})
 
-require("gitsigns").setup {}
+require("gitsigns").setup({})
 
 vim.keymap.set("n", "]c", "<cmd>Gitsigns nav_hunk next<cr>", { desc = "Next git hunk" })
 vim.keymap.set("n", "[c", "<cmd>Gitsigns nav_hunk prev<cr>", { desc = "Previous git hunk" })

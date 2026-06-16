@@ -18,19 +18,24 @@ vim.keymap.set("n", "<leader>bd", "<cmd>bdelete<cr>", { desc = "Delete buffer" }
 
 -- Diagnostics (vim.diagnostic is built in, always available)
 vim.keymap.set("n", "[d", function()
-  vim.diagnostic.jump { count = -1 }
+	vim.diagnostic.jump({ count = -1 })
 end, { desc = "Previous diagnostic" })
 vim.keymap.set("n", "]d", function()
-  vim.diagnostic.jump { count = 1 }
+	vim.diagnostic.jump({ count = 1 })
 end, { desc = "Next diagnostic" })
 vim.keymap.set("n", "<leader>e", vim.diagnostic.open_float, { desc = "Show diagnostic" })
 vim.keymap.set("n", "<leader>q", vim.diagnostic.setloclist, { desc = "Diagnostic quickfix" })
 
 -- Clear search highlight with <Esc> (only when search highlight is active)
 vim.keymap.set("n", "<Esc>", function()
-  if vim.v.hlsearch == 1 then
-    vim.cmd "nohlsearch"
-  else
-    return "<Esc>"
-  end
+	if vim.v.hlsearch == 1 then
+		vim.cmd("nohlsearch")
+	else
+		return "<Esc>"
+	end
 end, { expr = true, desc = "Clear search highlight" })
+
+-- Copy text
+vim.keymap.set({ "v", "x" }, "<C-c>", ":CopyText<CR>", {
+	desc = "Copy visual selection to clipboard",
+})
