@@ -15,6 +15,6 @@ zvm_after_init_commands+=('[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh')
 
 zvm_vi_yank () {
         zvm_yank
-        printf %s "${CUTBUFFER}" | xclip -sel c
+        printf %s "${CUTBUFFER}" | wl-copy
         zvm_exit_visual_mode
 }
