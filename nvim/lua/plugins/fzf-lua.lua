@@ -5,6 +5,18 @@ vim.pack.add {
 local fzf = require("fzf-lua")
 
 fzf.setup {
+  winopts = {
+    -- The fzf query is a terminal prompt, not a Neovim buffer, so the normal
+    -- i_CTRL-R register paste is unavailable. Emulate it: press <C-r>, then a
+    -- register name, and its contents are typed into the query.
+    on_create = function()
+      vim.keymap.set("t", "<C-r>", function()
+        local reg = vim.fn.getcharstr()
+        local text = vim.fn.getreg(reg) or ""
+        return text:gsub("[\n\r]", " ")
+      end, { expr = true, buffer = true, desc = "Paste register into fzf query" })
+    end,
+  },
   keymap = {
     builtin = {
       -- inherit the default builtin keymaps (e.g. <S-up>/<S-down> page scroll)
