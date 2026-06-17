@@ -1,3 +1,4 @@
+colorscheme darkblue
 call plug#begin()
 
 " List your plugins here
