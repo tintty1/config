@@ -2,7 +2,7 @@
 bindsym $mod+m exec i3-input -F 'mark %s' -P 'Mark: '
 
 # Launch apps in floating mode
-for_window [class="Slack"] floating enable
+for_window [class="slack"] floating enable
 for_window [class="Spotube"] floating enable
 for_window [class="Spotify"] floating enable
 for_window [class="Cursor"] floating enable
