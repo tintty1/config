@@ -120,5 +120,16 @@ MY_CUSTOM="$HOME/.zsh"
 # Load local configuration local.sh for specific machine (not tracked by git)
 [ -f "$MY_CUSTOM/local.sh" ] && source "$MY_CUSTOM/local.sh"
 
-. "$HOME/.local/bin/env"
+
+export EDITOR=nvim
+export ZVM_VI_EDITOR=nvim
+export KUBE_EDITOR=nvim
+
+export PATH=$HOME/bin:$HOME/.local/bin:$PATH
+
+# opencode
+export PATH=/home/tin/.opencode/bin:$PATH
+
+# golang
+export PATH=/usr/local/go/bin:/home/tin/go/bin:$PATH
 
