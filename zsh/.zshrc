@@ -128,8 +128,11 @@ export KUBE_EDITOR=nvim
 export PATH=$HOME/bin:$HOME/.local/bin:$PATH
 
 # opencode
-export PATH=/home/tin/.opencode/bin:$PATH
+export PATH=$HOME/.opencode/bin:$PATH
 
 # golang
-export PATH=/usr/local/go/bin:/home/tin/go/bin:$PATH
+export PATH=/usr/local/go/bin:$HOME/go/bin:$PATH
+
+# custom scripts
+export PATH=$HOME/tin/config/scripts:$PATH
 
