@@ -15,6 +15,10 @@ vim.o.listchars = [[tab:> ,trail:-,nbsp:+]]
 
 vim.o.messagesopt = "hit-enter,history:1000"
 
+-- Shorten the wait for multi-key maps (e.g. terminal <esc><esc>) so a lone <esc>
+-- passes through to tmux/claude quickly.
+vim.o.timeoutlen = 300
+
 -- Open new splits to the right and below
 vim.o.splitright = true
 vim.o.splitbelow = true

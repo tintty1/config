@@ -42,7 +42,7 @@ and writes no lock file. Start the bridge manually anytime with `:ClaudeStart`.
 | File | Role |
 |------|------|
 | `lua/plugins/claudecode.lua` | Lazy `start()` (setup + server + env export + send/diff keymaps + auto-show autocmd), `:ClaudeStart` command |
-| `lua/plugins/toggleterm.lua` | `on_open` bridge trigger + `_G.toggleterm_toggle` / `_G.toggleterm_show` layout helpers |
+| `lua/plugins/toggleterm.lua` | Singleton terminal: `:Vterm`/`:Hterm`/`:Fterm`/`:TermCycle` commands, `on_open` bridge trigger, `_G.toggleterm_show` (used by the send autocmd) |
 | `init.lua` | `require("plugins.claudecode")` |
 
 ## Connecting claude to Neovim
@@ -82,16 +82,21 @@ Verify the bridge and connection with:
 | `<leader>an` | normal | Deny a diff claude proposes |
 | `<leader>a?` | normal | Show connection status |
 
-### Terminal layout (`<leader>t`)
+### Terminal layout
 
-Switching direction re-displays the **same** persistent terminal buffer, so the
-tmux/claude session never restarts.
+There is a **single terminal per nvim instance** (id 1). Each command creates it if
+missing, hides it if already shown in that layout, or switches it to that layout
+otherwise. Switching layout re-displays the **same** persistent buffer, so the
+tmux/claude session never restarts. Sizes: vertical width = 40% of columns,
+horizontal height = 30% of lines, float uses `float_opts`.
 
-| Key | Action |
-|-----|--------|
-| `<leader>v` | Show the terminal as a vertical split (press again to hide) |
-| `<leader>tf` | Show the terminal as a float |
-| `<c-\>` | Toggle the float (toggleterm's `open_mapping`, unchanged) |
+| Command | Key | Action |
+|---------|-----|--------|
+| `:Vterm` | `<leader>v` | Vertical split (create/toggle) |
+| `:Hterm` | `<leader>th` | Horizontal split (create/toggle) |
+| `:Fterm` | `<leader>tf` | Float (create/toggle) |
+| `:TermCycle` | `<leader>tc` | Cycle layout: vertical → horizontal → float |
+| | `<c-\>` | Toggle the term (toggleterm's `open_mapping`, unchanged) |
 
 After a send completes, the vertical panel auto-appears **without stealing focus**
 (via the `User ClaudeCodeSendComplete` autocmd in `lua/plugins/claudecode.lua`) so
