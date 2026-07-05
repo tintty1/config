@@ -1,0 +1,418 @@
+#!/usr/bin/env bash
+# gui — one-call-per-action driver for the nested-niri GUI agent.
+#
+# Collapses the screenshot → locate → rescale → anchor → act → verify dance
+# into a single invocation so the driving agent spends one tool call (and a
+# one-line result) per semantic action instead of ~6.
+#
+#   gui click "the blue Next button" [--button right] [--double] [--no-verify]
+#   gui type "some text" [--enter] [--terminal] [--replace] [--via <chord>]
+#     --replace  clear existing field content first (ctrl+a select-all; ctrl+e
+#                ctrl+u with --terminal)
+#     --via      focus the field with this shortcut first, e.g. --via ctrl+l for
+#                location/URL bars — REQUIRED for GTK entries where Return must
+#                activate (GTK ignores Return from a keyboard that didn't focus
+#                the field; clicking the field is not enough)
+#   gui key ctrl+s Return ...                       # shortcuts / named keys
+#   gui scroll <dy> [--at "the results list"]
+#   gui drag "the volume slider" <dx> <dy>
+#   gui isolate <id|app_id>              # move window alone to an empty workspace, full width
+#   gui ask "is the login form visible?" [--window <id|app_id>]
+#   gui locate "the search box"                     # debug: prints real pixels
+#   gui shot [--window <id|app_id>]                 # debug: screenshot only
+#   gui run "log into example.com as demo" [--max-steps 15]
+#
+# Env: NESTED_DISPLAY + NESTED_SOCKET (required)
+#      GUI_MODEL (default google/gemini-3.1-flash-lite-preview), GUI_TEMP (1.0)
+#      GUI_SETTLE (0.6s repaint settle), GUI_DIR (/tmp/niri-gui), GUI_VERIFY (1)
+#      GUI_WINDOW (default --window for ask/shot), GUI_MAX_STEPS (run cap, 15)
+#
+# --window uses niri's builtin screenshot-window: captures that window's full
+# buffer (even parts off-screen), position-independent. PERCEPTION ONLY —
+# click/locate/run always use full-screen shots, because clicking needs screen
+# coordinates and niri IPC exposes no window positions to map from.
+#
+# For accurate clicks on a cluttered workspace, `gui isolate <win>` first:
+# alone on an empty workspace, the full-screen shot IS the window view, so
+# vision coordinates are native screen coordinates.
+set -uo pipefail
+
+MODEL=${GUI_MODEL:-google/gemini-3.1-flash-lite-preview}
+TEMP=${GUI_TEMP:-1.0}
+SETTLE=${GUI_SETTLE:-0.6}
+DIR=${GUI_DIR:-/tmp/niri-gui}
+VERIFY=${GUI_VERIFY:-1}
+SHOT=$DIR/screen.png
+IMG_W=0 IMG_H=0
+
+die() { echo "gui: $*" >&2; exit 1; }
+w()   { env WAYLAND_DISPLAY="$NESTED_DISPLAY" "$@"; }
+
+usage() { # print the whole header comment (up to the first non-comment line)
+  awk 'NR==1{next} /^[^#]/{exit} {sub(/^# ?/,""); print}' "$0"; exit "${1:-1}"
+}
+case ${1:-} in ''|-h|--help|help) usage 0 ;; esac
+
+[[ -n ${NESTED_DISPLAY:-} ]] || die "NESTED_DISPLAY not set (see SKILL.md §1)"
+[[ -n ${NESTED_SOCKET:-}  ]] || die "NESTED_SOCKET not set (see SKILL.md §1)"
+mkdir -p "$DIR"
+
+# ---------- perception ----------
+
+snap() { # settle, full-screen screenshot, record size
+  sleep "$SETTLE"
+  w grim "$SHOT" || die "grim failed"
+  read -r IMG_W IMG_H < <(identify -format '%w %h' "$SHOT")
+}
+
+resolve_id() { # $1 = window id or app_id -> numeric window id
+  NIRI_SOCKET=$NESTED_SOCKET niri msg --json windows | jq -re --arg q "$1" \
+    '[.[] | select((.id|tostring)==$q or .app_id==$q)][0].id' 2>/dev/null \
+    || die "window '$1' not found"
+}
+
+snap_window() { # $1 = id/app_id; captures the window buffer via niri builtin
+  local id out i
+  id=$(resolve_id "$1") || exit 1
+  sleep "$SETTLE"; rm -f "$SHOT"
+  NIRI_SOCKET=$NESTED_SOCKET niri msg action screenshot-window --id "$id" --path "$SHOT" \
+    || die "screenshot-window failed"
+  for ((i=0; i<30; i++)); do            # niri writes the file asynchronously
+    if out=$(identify -format '%w %h' "$SHOT" 2>/dev/null); then
+      read -r IMG_W IMG_H <<<"$out"; return 0
+    fi
+    sleep 0.1
+  done
+  die "screenshot-window: $SHOT never appeared"
+}
+
+vision() { # $1 system prompt, $2 user prompt -> model text on stdout
+  # ai CLI spews node/SDK warnings on stderr AND one banner on stdout; strip both
+  # (real errors land in the log — check it on failure)
+  local out
+  out=$(ai text -q -m "$MODEL" -t "$TEMP" --image "$SHOT" -s "$1" "$2" 2>>"$DIR/ai-stderr.log") \
+    || die "ai call failed — see $DIR/ai-stderr.log"
+  printf '%s\n' "$out" | grep -v '^AI SDK Warning' || true
+}
+
+to_json() { tr '\n' ' ' | grep -o '{.*}' | head -1; }  # strip prose/fences around JSON
+
+LOC_SYS='You locate UI elements in screenshots. Respond with ONLY a JSON object:
+{"found": true, "x": <int>, "y": <int>}
+x,y = CENTER of the element on a 0-1000 normalized grid (each axis independently scaled 0-1000 across the image).
+If not visible: {"found": false, "reason": "<short why>"}. No prose, no code fences.'
+
+locate() { # $1 = element description -> sets RX RY (real screen pixels)
+  local out j
+  out=$(vision "$LOC_SYS" "Element to locate: $1")
+  j=$(printf '%s' "$out" | to_json) || die "locate '$1': unparsable reply: $out"
+  [[ $(jq -r '.found' <<<"$j") == true ]] \
+    || die "locate '$1': not found ($(jq -r '.reason // "no reason"' <<<"$j"))"
+  RX=$(awk -v v="$(jq -r .x <<<"$j")" -v s="$IMG_W" 'BEGIN{printf "%d", v/1000*s}')
+  RY=$(awk -v v="$(jq -r .y <<<"$j")" -v s="$IMG_H" 'BEGIN{printf "%d", v/1000*s}')
+}
+
+verify_after() { # $1 = action description -> one-line state report
+  [[ $VERIFY == 1 ]] || return 0
+  snap
+  vision 'You verify GUI actions from screenshots. Reply with ONE short line: current screen state and whether the stated action appears to have taken effect. No preamble.' \
+         "Action just performed: $1"
+}
+
+# ---------- motor ----------
+
+goto() { # absolute positioning: clamp-to-origin anchor, then exact move
+  w wlrctl pointer move -9999 -9999
+  w wlrctl pointer move "$1" "$2"
+}
+
+# GTK QUIRKS (all verified against Thunar; terminals are immune to every one):
+#  1. Cold start: GTK decodes the FIRST wtype invocation after compositor start
+#     with the wrong keymap — chords/text come out as garbage digits. Warm up
+#     once per session with a modifier-only call (modifier events are a semantic
+#     bitmask, immune to mistranslation — harmless even if it misfires).
+#  2. Paste abort: GTK fetches the clipboard asynchronously; if the wtype
+#     process (= its virtual keyboard) exits right after ctrl+v, the fetch is
+#     cancelled. Hence literal typing for GUI apps, clipboard for terminals.
+#  3. wtype -k Return never activates GTK entries (fine in terminals) — Enter
+#     goes through wlrctl instead.
+# Chaining one widget interaction (focus chord, select-all, text) into ONE
+# wtype process remains the rule: fewer invocations, no focus surprises between.
+
+ensure_warm() { # GTK quirk 1: once per nested session
+  local mark=$DIR/warm-${NESTED_SOCKET##*/}
+  [[ -e $mark ]] && return 0
+  w wtype -M shift -m shift
+  sleep 0.2
+  touch "$mark"
+}
+
+KARGS=()
+key_args() { # append wtype args for one chord ("ctrl+shift+s", "Return") to KARGS
+  local spec=$1 part parts last rel=()
+  IFS=+ read -ra parts <<<"$spec"
+  last=${parts[-1]}
+  unset 'parts[-1]'
+  for part in "${parts[@]}"; do
+    case ${part,,} in
+      ctrl|control) KARGS+=(-M ctrl);  rel=(-m ctrl "${rel[@]}") ;;
+      shift)        KARGS+=(-M shift); rel=(-m shift "${rel[@]}") ;;
+      alt|opt)      KARGS+=(-M alt);   rel=(-m alt "${rel[@]}") ;;
+      super|logo|win|cmd) KARGS+=(-M logo); rel=(-m logo "${rel[@]}") ;;
+      altgr)        KARGS+=(-M altgr); rel=(-m altgr "${rel[@]}") ;;
+      *) die "unknown modifier '$part' in '$spec'" ;;
+    esac
+  done
+  KARGS+=(-k "$last" "${rel[@]}")
+}
+
+send_enter() { # wtype -k Return does NOT activate GTK entries (verified: Thunar path
+  w wlrctl keyboard type $'\n'      # bar); wlrctl's Enter does, even from its own process
+}
+
+type_text() { # $1 text, $2 terminal y/n, $3 replace y/n, $4 enter y/n, $5 via-chord|"" — ONE wtype process
+  local args=()
+  ensure_warm
+  if [[ -n ${5:-} ]]; then          # focus the field via its shortcut (e.g. ctrl+l) in the
+    KARGS=(); key_args "$5"         # same process, so the selection it creates survives
+    args+=("${KARGS[@]}")
+  fi
+  if [[ $2 == y ]]; then
+    # terminals: clipboard paste (fast, multiline-safe); readline clear via ctrl+e ctrl+u
+    printf '%s' "$1" | w wl-copy
+    [[ $3 == y ]] && args+=(-M ctrl -k e -k u -m ctrl)
+    args+=(-M ctrl -M shift -k v -m shift -m ctrl)
+    [[ $4 == y ]] && args+=(-k Return)   # proven fine in terminals
+    w wtype "${args[@]}"
+  else
+    # GUI apps: literal typing (nested.kdl disables key-repeat, so no "helllllo");
+    # clipboard paste is NOT reliable in GTK (see quirk above). ctrl+a select-all
+    # in the same process means the typed text replaces the old content.
+    # Caveat: text starting with "-" would misparse as a wtype flag.
+    [[ $3 == y ]] && args+=(-M ctrl -k a -m ctrl)
+    args+=(-d 15 "$1")
+    w wtype "${args[@]}"
+    [[ $4 == y ]] && send_enter          # GTK needs the wlrctl Enter
+  fi
+}
+
+# ---------- subcommands ----------
+
+cmd_click() {
+  local desc="" btn=left double=n
+  while (($#)); do case $1 in
+    --button) btn=$2; shift 2 ;;
+    --double) double=y; shift ;;
+    --no-verify) VERIFY=0; shift ;;
+    *) desc=$1; shift ;;
+  esac; done
+  [[ -n $desc ]] || die "click: element description required"
+  snap; locate "$desc"; goto "$RX" "$RY"
+  w wlrctl pointer click "$btn"
+  [[ $double == y ]] && w wlrctl pointer click "$btn"
+  echo "clicked ($RX,$RY) '$desc'$([[ $double == y ]] && echo ' x2')"
+  verify_after "${btn}-click on '$desc' at ($RX,$RY)"
+}
+
+cmd_type() {
+  local text="" enter=n term=n repl=n via=""
+  while (($#)); do case $1 in
+    --enter) enter=y; shift ;;
+    --terminal) term=y; shift ;;
+    --replace) repl=y; shift ;;
+    --via) via=$2; shift 2 ;;
+    *) text=$1; shift ;;
+  esac; done
+  [[ -n $text ]] || die "type: text required"
+  type_text "$text" "$term" "$repl" "$enter" "$via"
+  echo "typed ${#text} chars${via:+ via $via}$([[ $repl == y ]] && echo ', replacing old content')$([[ $enter == y ]] && echo ' + Return')"
+}
+
+cmd_key() { # chords chained in one wtype process (GTK quirks above); bare Enter via wlrctl
+  (($#)) || die "key: at least one keyspec required (e.g. ctrl+s, Return)"
+  ensure_warm
+  local k; KARGS=()
+  for k in "$@"; do
+    if [[ ${k,,} =~ ^(return|enter|kp_enter)$ ]]; then
+      ((${#KARGS[@]})) && { w wtype "${KARGS[@]}"; KARGS=(); }
+      send_enter
+    else
+      key_args "$k"
+    fi
+  done
+  ((${#KARGS[@]})) && w wtype "${KARGS[@]}"
+  echo "pressed: $*"
+}
+
+cmd_scroll() {
+  local dy="" at=""
+  while (($#)); do case $1 in
+    --at) at=$2; shift 2 ;;
+    *) dy=$1; shift ;;
+  esac; done
+  [[ -n $dy ]] || die "scroll: dy required (positive = down)"
+  if [[ -n $at ]]; then snap; locate "$at"; goto "$RX" "$RY"; fi
+  w wlrctl pointer scroll "$dy" 0
+  echo "scrolled dy=$dy${at:+ at '$at'}"
+}
+
+cmd_drag() {
+  local desc=$1 dx=$2 dy=$3
+  snap; locate "$desc"; goto "$RX" "$RY"
+  w wlrctl pointer drag "$dx" "$dy"
+  echo "dragged from ($RX,$RY) '$desc' by ($dx,$dy)"
+  verify_after "drag from '$desc' by ($dx,$dy)"
+}
+
+cmd_isolate() { # move window to an empty workspace + full width: clean shots, native click coords
+  local id ws
+  id=$(resolve_id "$1") || exit 1
+  ws=$(NIRI_SOCKET=$NESTED_SOCKET niri msg --json workspaces \
+       | jq -r '[.[] | select(.active_window_id==null)][0].idx // empty')
+  [[ -n $ws ]] || die "no empty workspace found"
+  NIRI_SOCKET=$NESTED_SOCKET niri msg action move-window-to-workspace --window-id "$id" "$ws" \
+    || die "move-window-to-workspace failed"
+  NIRI_SOCKET=$NESTED_SOCKET niri msg action focus-window --id "$id"
+  NIRI_SOCKET=$NESTED_SOCKET niri msg action set-window-width --id "$id" '100%'
+  echo "isolated window $id on workspace $ws, full width"
+}
+
+cmd_ask() {
+  local q="" win=${GUI_WINDOW:-}
+  while (($#)); do case $1 in
+    --window) win=$2; shift 2 ;;
+    *) q=$1; shift ;;
+  esac; done
+  [[ -n $q ]] || die "ask: question required"
+  if [[ -n $win ]]; then snap_window "$win"; else snap; fi
+  vision 'Answer concisely based on the screenshot. Plain text, no preamble.' "$q"
+}
+
+cmd_locate() {
+  snap; locate "$1"
+  echo "$RX $RY   # '$1' (image ${IMG_W}x${IMG_H})"
+}
+
+cmd_shot() {
+  local win=${GUI_WINDOW:-}
+  while (($#)); do case $1 in
+    --window) win=$2; shift 2 ;;
+    *) shift ;;
+  esac; done
+  if [[ -n $win ]]; then snap_window "$win"; else snap; fi
+  echo "$SHOT (${IMG_W}x${IMG_H}${win:+, window $win})"
+}
+
+# ---------- autonomous sub-loop ----------
+
+RUN_SYS='You drive a GUI step-by-step from screenshots to accomplish a goal.
+Each turn you see the CURRENT screenshot, the goal, and the actions taken so far.
+Respond with ONLY one JSON object — the single next action. No prose, no code fences.
+
+Actions:
+{"action":"click","x":<int>,"y":<int>,"target":"<what you are clicking>","button":"left|right|middle"}
+{"action":"type","text":"<text>","enter":true|false,"terminal":true|false,"replace":true|false,"via":"<chord or omit>"}
+  // terminal=true when typing into a terminal emulator
+  // replace=true clears the focused field first (select-all) — use when the field already has content, e.g. path bars and search boxes
+  // via = keyboard shortcut that focuses the target field (e.g. "ctrl+l" for location/URL bars). ALWAYS prefer via over clicking the field: some apps ignore Return unless the field was focused this way
+{"action":"key","keys":"<e.g. ctrl+s, Return, Tab, Escape>"}
+{"action":"scroll","dy":<int>,"x":<int>,"y":<int>}                            // positive dy = down; x,y = where to scroll
+{"action":"wait","seconds":<1-5>}                                             // page/app still loading
+{"action":"done","success":true|false,"reason":"<one line>"}                  // goal reached, or impossible
+
+Coordinates: 0-1000 normalized grid, each axis independently scaled across the image. Point at element CENTERS.
+Rules: one action per turn; prefer keyboard shortcuts when reliable; if the same action failed twice, try a different approach; declare done (success=false) rather than repeating a hopeless action.'
+
+cmd_run() {
+  local goal="" max=${GUI_MAX_STEPS:-15}
+  while (($#)); do case $1 in
+    --max-steps) max=$2; shift 2 ;;
+    *) goal=$1; shift ;;
+  esac; done
+  [[ -n $goal ]] || die "run: goal required"
+
+  local history="" step out j act line mx my note
+  for ((step=1; step<=max; step++)); do
+    snap
+    cp "$SHOT" "$DIR/step-$step.png"
+    out=$(vision "$RUN_SYS" "GOAL: $goal
+
+ACTIONS SO FAR:
+${history:-(none yet)}
+
+Current screenshot attached. Decide the single next action.")
+    if ! j=$(printf '%s' "$out" | to_json); then
+      line="$step. model reply unparsable, retrying"
+      echo "$line"; history+="$line"$'\n'; continue
+    fi
+    act=$(jq -r '.action // empty' <<<"$j")
+    case $act in
+      click)
+        mx=$(jq -r '.x // empty' <<<"$j"); my=$(jq -r '.y // empty' <<<"$j")
+        note=$(jq -r '.target // "?"' <<<"$j")
+        if [[ -z $mx || -z $my ]]; then
+          line="$step. click '$note' rejected: no coordinates"
+        else
+          RX=$(awk -v v="$mx" -v s="$IMG_W" 'BEGIN{printf "%d", v/1000*s}')
+          RY=$(awk -v v="$my" -v s="$IMG_H" 'BEGIN{printf "%d", v/1000*s}')
+          goto "$RX" "$RY"
+          w wlrctl pointer click "$(jq -r '.button // "left"' <<<"$j")"
+          line="$step. click ($RX,$RY) '$note'"
+        fi ;;
+      type)
+        note=$(jq -r '.text // ""' <<<"$j")
+        type_text "$note" \
+          "$(jq -r 'if .terminal==true then "y" else "n" end' <<<"$j")" \
+          "$(jq -r 'if .replace==true  then "y" else "n" end' <<<"$j")" \
+          "$(jq -r 'if .enter==true    then "y" else "n" end' <<<"$j")" \
+          "$(jq -r '.via // ""' <<<"$j")"
+        line="$step. type '${note:0:40}'$([[ $(jq -r '.enter' <<<"$j") == true ]] && echo ' + Return')" ;;
+      key)
+        note=$(jq -r '.keys' <<<"$j")
+        KARGS=(); key_args "$note"
+        w wtype "${KARGS[@]}"
+        line="$step. key $note" ;;
+      scroll)
+        mx=$(jq -r '.x // 500' <<<"$j"); my=$(jq -r '.y // 500' <<<"$j")
+        RX=$(awk -v v="$mx" -v s="$IMG_W" 'BEGIN{printf "%d", v/1000*s}')
+        RY=$(awk -v v="$my" -v s="$IMG_H" 'BEGIN{printf "%d", v/1000*s}')
+        goto "$RX" "$RY"
+        note=$(jq -r 'if (.dy|type)=="number" then .dy else 3 end' <<<"$j")
+        w wlrctl pointer scroll "$note" 0
+        line="$step. scroll dy=$note at ($RX,$RY)" ;;
+      wait)
+        sleep "$(jq -r 'if (.seconds|type)=="number" and .seconds<=5 then .seconds else 2 end' <<<"$j")"
+        line="$step. wait" ;;
+      done)
+        note=$(jq -r '.reason // ""' <<<"$j")
+        if [[ $(jq -r '.success' <<<"$j") == true ]]; then
+          echo "RESULT: success — $note"; return 0
+        else
+          echo "RESULT: gave up — $note"; return 1
+        fi ;;
+      *)
+        line="$step. unknown action '$act' ignored" ;;
+    esac
+    echo "$line"                     # live progress (also the final log)
+    history+="$line"$'\n'
+  done
+  echo "RESULT: step cap ($max) reached without done — screenshots in $DIR/step-*.png"
+  return 1
+}
+
+# ---------- dispatch ----------
+
+cmd=${1:-}; shift || true
+case $cmd in
+  click)  cmd_click "$@" ;;
+  type)   cmd_type "$@" ;;
+  key)    cmd_key "$@" ;;
+  scroll) cmd_scroll "$@" ;;
+  drag)   cmd_drag "$@" ;;
+  isolate) cmd_isolate "$@" ;;
+  ask)    cmd_ask "$@" ;;
+  locate) cmd_locate "$@" ;;
+  shot)   cmd_shot "$@" ;;
+  run)    cmd_run "$@" ;;
+  *) usage ;;
+esac
