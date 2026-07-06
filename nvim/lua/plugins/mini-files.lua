@@ -18,12 +18,41 @@ vim.keymap.set("n", "<leader>fe", function()
 end, { desc = "File explorer (mini.files)" })
 
 -- Map <CR> as an additional key for `go_in_plus` (alongside the default `L`).
+-- Map `p` to preview image files with imv-wayland.
+local image_exts = {
+  png = true,
+  jpg = true,
+  jpeg = true,
+  gif = true,
+  bmp = true,
+  webp = true,
+  tiff = true,
+  tif = true,
+  svg = true,
+  avif = true,
+  jxl = true,
+  ico = true,
+}
+
 vim.api.nvim_create_autocmd("User", {
   pattern = "MiniFilesBufferCreate",
   callback = function(args)
     vim.keymap.set("n", "<CR>", function()
       MiniFiles.go_in { close_on_file = true }
     end, { buffer = args.data.buf_id, desc = "Go in entry (and close on file)" })
+
+    vim.keymap.set("n", "p", function()
+      local entry = MiniFiles.get_fs_entry()
+      if not entry or entry.fs_type ~= "file" then
+        return
+      end
+      local ext = entry.name:match("%.([^.]+)$")
+      if not (ext and image_exts[ext:lower()]) then
+        vim.notify("Not an image file: " .. entry.name, vim.log.levels.WARN)
+        return
+      end
+      vim.system { "imv-wayland", entry.path }
+    end, { buffer = args.data.buf_id, desc = "Preview image with imv-wayland" })
   end,
 })
 
