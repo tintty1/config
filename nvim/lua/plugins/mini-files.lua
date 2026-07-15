@@ -4,7 +4,21 @@ vim.pack.add {
 
 local MiniFiles = require("mini.files")
 
+-- Directories that are pure noise in the explorer (VCS internals, tool caches).
+local hidden_dirs = {
+  [".git"] = true,
+  ["__pycache__"] = true,
+  [".ruff_cache"] = true,
+  [".mypy_cache"] = true,
+  [".pytest_cache"] = true,
+}
+
 MiniFiles.setup {
+  content = {
+    filter = function(fs_entry)
+      return not (fs_entry.fs_type == "directory" and hidden_dirs[fs_entry.name])
+    end,
+  },
   windows = {
     preview = true,
   },
